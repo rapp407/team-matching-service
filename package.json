@@ -1,0 +1,22 @@
+{
+  "name": "team-matching-service",
+  "version": "1.0.0",
+  "description": "Node.js starter for team matching service",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rapp407/team-matching-service.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rapp407/team-matching-service/issues"
+  },
+  "homepage": "https://github.com/rapp407/team-matching-service#readme"
+}
