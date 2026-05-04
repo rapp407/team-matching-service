@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "mock-sso": "node src/mock-sso/index.js",
     "test": "node --test"
   },
   "repository": {
@@ -21,6 +22,7 @@
   "homepage": "https://github.com/rapp407/team-matching-service#readme",
   "dependencies": {
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "pg": "^8.20.0"
   }
 }
