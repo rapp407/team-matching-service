@@ -19,10 +19,16 @@ async function main() {
   }
 
   console.log('\nApplication ready for development.\n');
+  // Start HTTP server (Express app)
+  const app = require('./app');
+  const server = app.listen(config.app.port, () => {
+    console.log(`HTTP server listening on http://localhost:${config.app.port}`);
+  });
 
   // Handle graceful shutdown
   process.on('SIGINT', async () => {
     console.log('\nShutting down gracefully...');
+    server.close(() => console.log('HTTP server closed'));
     await closePool();
     process.exit(0);
   });
