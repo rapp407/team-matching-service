@@ -8,7 +8,7 @@ const port = process.env.MOCK_SSO_PORT || 3001;
 const tokens = {
   'valid-student-1': { student_id: 's1001', role: 'student', student_name: 'Student One' },
   'valid-po-1': { student_id: 's2001', role: 'student', student_name: 'PO One' },
-  'valid-admin-1': { student_id: 'admin1', role: 'admin', student_name: 'Administrator' },
+  'valid-admin-1': { student_id: 'admin1', role: 'student', student_name: 'Administrator' },
 };
 
 app.get('/auth', (req, res) => {
