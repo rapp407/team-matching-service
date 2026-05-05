@@ -18,5 +18,9 @@
   "bugs": {
     "url": "https://github.com/rapp407/team-matching-service/issues"
   },
-  "homepage": "https://github.com/rapp407/team-matching-service#readme"
+  "homepage": "https://github.com/rapp407/team-matching-service#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pg": "^8.20.0"
+  }
 }

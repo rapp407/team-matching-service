@@ -12,6 +12,14 @@ Basic Node.js project initialization for this repository.
 npm install
 ```
 
+## Database Setup
+
+See [migrations/README.md](migrations/README.md) for database initialization steps.
+
+Minimal:
+1. Ensure Docker containers are running: `docker compose up -d`
+2. Run migration via pgAdmin or CLI (see migrations/README.md)
+
 ## Run
 
 ```bash
@@ -23,3 +31,7 @@ or
 ```bash
 npm start
 ```
+
+## Environment
+
+Copy `.env.example` to `.env` and adjust values as needed.
