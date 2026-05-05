@@ -1,6 +1,7 @@
 const express = require('express');
 const auth = require('./middleware/auth');
 const poolRoutes = require('./routes/poolRoutes');
+const teamRoutes = require('./routes/teamRoutes');
 
 const app = express();
 app.use(express.json());
@@ -16,5 +17,8 @@ app.get('/me', auth, (req, res) => {
 
 // Pool routes
 app.use(poolRoutes);
+
+// Team routes
+app.use(teamRoutes);
 
 module.exports = app;
