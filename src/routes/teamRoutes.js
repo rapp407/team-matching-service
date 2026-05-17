@@ -151,6 +151,25 @@ router.post('/join-requests', auth, requireStudentRole, async (req, res) => {
   return handleCreateJoinRequest(req, res, req.body.team_id || req.body.teamId);
 });
 
+// PUT /join-requests/:req/respond (PO acc/reject permohonan) - global alias
+router.put('/join-requests/:req/respond', auth, requireStudentRole, async (req, res) => {
+  try {
+    const { req: reqId } = req.params;
+    const { action } = req.body;
+    if (!action) return res.status(400).json({ error: 'missing_required_fields', required: ['action'] });
+
+    const normalizedAction = String(action).toLowerCase();
+    if (!['accepted', 'rejected'].includes(normalizedAction)) {
+      return res.status(400).json({ error: 'invalid_action', detail: "action harus accepted atau rejected" });
+    }
+
+    const result = await respondJoinRequest({ requestId: reqId, poStudentId: req.user.student_id, response: normalizedAction });
+    return res.json({ data: result });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
+  }
+});
+
 // POST /teams/:id/join-requests (Talent apply ke tim)
 router.post('/teams/:id/join-requests', auth, requireStudentRole, async (req, res) => {
   return handleCreateJoinRequest(req, res, req.params.id);
