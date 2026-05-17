@@ -14,6 +14,24 @@ function requireStudentRole(req, res, next) {
   return next();
 }
 
+async function handleCreateJoinRequest(req, res, teamId) {
+  try {
+    if (!teamId) {
+      return res.status(400).json({ error: 'missing_required_fields', required: ['team_id'] });
+    }
+
+    const result = await createJoinRequest({
+      teamId,
+      studentId: req.user.student_id,
+      message: req.body.message || null,
+    });
+
+    return res.status(201).json({ data: result });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
+  }
+}
+
 /** ==========================================
  * 1. TEAM CORE & DISCOVERY
  * ========================================== */
@@ -128,16 +146,14 @@ router.put('/invites/:id/respond', auth, requireStudentRole, async (req, res) =>
  * 3. JOIN REQUESTS (Talent memohon gabung)
  * ========================================== */
 
+// POST /join-requests (Talent apply ke tim via payload team_id)
+router.post('/join-requests', auth, requireStudentRole, async (req, res) => {
+  return handleCreateJoinRequest(req, res, req.body.team_id || req.body.teamId);
+});
+
 // POST /teams/:id/join-requests (Talent apply ke tim)
 router.post('/teams/:id/join-requests', auth, requireStudentRole, async (req, res) => {
-  try {
-    const result = await createJoinRequest({
-      teamId: req.params.id, studentId: req.user.student_id, message: req.body.message
-    });
-    res.status(201).json({ data: result });
-  } catch (err) { 
-    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
-  }
+  return handleCreateJoinRequest(req, res, req.params.id);
 });
 
 // PUT /teams/:id/join-requests/:req_id (PO acc/reject permohonan)
