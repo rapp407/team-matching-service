@@ -25,6 +25,18 @@ async function getTeamById(teamId) {
   return result.rows[0] || null;
 }
 
+async function getTeamByPoStudentId(poStudentId) {
+  const result = await query(
+    `SELECT id, name, status, generation_method, period, created_by, po_student_id, created_at
+     FROM teams
+     WHERE po_student_id = $1 AND status IN ('forming', 'active')
+     LIMIT 1`,
+    [poStudentId]
+  );
+
+  return result.rows[0] || null;
+}
+
 async function getTeamMemberByStudentId(teamId, studentId) {
   const result = await query(
     `SELECT id, team_id, student_id, role_in_team
@@ -403,6 +415,7 @@ module.exports = {
   respondToInvite,
   getPoolEntryByStudentAndPeriod,
   getTeamById,
+  getTeamByPoStudentId,
   getTeamMemberByStudentId,
   getInviteById,
   updateRequiredSkills,

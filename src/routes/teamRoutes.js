@@ -2,7 +2,7 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const { 
   createTeam, inviteMemberToTeam, respondToInvite, getPoolEntryByStudentAndPeriod,
-  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember
+  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember, getTeamByPoStudentId
 } = require('../services/teamService');
 
 const router = express.Router();
@@ -184,6 +184,21 @@ router.put('/teams/:id/join-requests/:req_id', auth, requireStudentRole, async (
     res.json({ data: result });
   } catch (err) { 
     res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
+  }
+});
+
+// DELETE /members/:sid (PO kick member dari tim mereka) - global alias
+router.delete('/members/:sid', auth, requireStudentRole, async (req, res) => {
+  try {
+    const targetSid = req.params.sid;
+
+    const team = await getTeamByPoStudentId(req.user.student_id);
+    if (!team || team.po_student_id !== req.user.student_id) return res.status(403).json({ error: 'forbidden' });
+
+    await removeMember(team.id, targetSid, team.period);
+    return res.json({ message: 'Member berhasil dikeluarkan' });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
   }
 });
 
