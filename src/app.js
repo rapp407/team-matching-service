@@ -3,6 +3,9 @@ const auth = require('./middleware/auth');
 const poolRoutes = require('./routes/poolRoutes');
 const teamRoutes = require('./routes/teamRoutes');
 const { respondToInvite } = require('./services/teamService');
+const recommendationRoutes = require('./routes/recommendationRoutes');
+const internalRoutes = require('./routes/internalRoutes');
+const profileRoutes = require('./routes/profileRoutes');
 
 const app = express();
 app.use(express.json());
@@ -78,5 +81,14 @@ app.use(poolRoutes);
 
 // Team routes
 app.use(teamRoutes);
+
+// Recommendation routes
+app.use(recommendationRoutes);
+
+// Internal routes
+app.use(internalRoutes);
+
+// Profile routes
+app.use(profileRoutes);
 
 module.exports = app;

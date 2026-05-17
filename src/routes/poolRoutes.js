@@ -6,17 +6,20 @@ const router = express.Router();
 
 /**
  * POST /pool
- * Join pool dengan validasi duplikasi
- * Body: { program_studi, sdg_topics, availability, notes, period }
+ * Join pool dengan validasi duplikasi dan kewajiban mengisi skills
  */
 router.post('/pool', auth, async (req, res) => {
   try {
-    const { program_studi, sdg_topics, availability, notes, period } = req.body;
+    // 1. TAMBAHKAN 'skills' DI DALAM DESTRUCTURING INI
+    const { program_studi, sdg_topics, availability, notes, period, skills } = req.body; 
     const { student_id, student_name } = req.user;
 
-    // Validasi input wajib
-    if (!program_studi || !period) {
-      return res.status(400).json({ error: 'missing_required_fields', required: ['program_studi', 'period'] });
+    // 2. VALIDASI WAJIB (Termasuk skills)
+    if (!program_studi || !period || !skills || !Array.isArray(skills) || skills.length === 0) {
+      return res.status(400).json({ 
+        error: 'missing_required_fields', 
+        required: ['program_studi', 'period', 'skills'] 
+      });
     }
 
     const poolEntry = await joinPool(student_id, student_name, program_studi, {
@@ -24,6 +27,7 @@ router.post('/pool', auth, async (req, res) => {
       availability,
       notes,
       period,
+      skills // 3. Sekarang skills sudah terdefinisi dan siap dikirim ke service
     });
 
     return res.status(201).json({ data: poolEntry });
@@ -87,6 +91,7 @@ router.delete('/pool/me', auth, async (req, res) => {
     console.error('[POOL] DELETE /pool/me error:', err);
     return res.status(500).json({ error: 'internal_error' });
   }
+
 });
 
 module.exports = router;
