@@ -335,7 +335,20 @@ async function updateRequiredSkills(teamId, poStudentId, requiredSkills) {
 }
 
 async function getTeamList() {
+  // legacy: no filter
   const result = await query(`SELECT id, name, status, required_skills, po_student_id FROM teams WHERE status = 'forming'`);
+  return result.rows;
+}
+
+// New: filtered list by skill when provided (skill should be a string)
+async function getTeamListBySkill(needsSkill) {
+  if (!needsSkill) return getTeamList();
+
+  // Use jsonb ? operator which returns true if the string exists in top-level JSON array
+  const result = await query(
+    `SELECT id, name, status, required_skills, po_student_id FROM teams WHERE status = 'forming' AND required_skills ? $1`,
+    [needsSkill]
+  );
   return result.rows;
 }
 
@@ -434,6 +447,7 @@ module.exports = {
   getInviteById,
   updateRequiredSkills,
   getTeamList,
+  getTeamListBySkill,
   getTeamDetail,
   createJoinRequest,
   respondJoinRequest,

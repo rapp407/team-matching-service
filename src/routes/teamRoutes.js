@@ -81,7 +81,8 @@ router.put('/teams/:id/required-skills', auth, requireStudentRole, async (req, r
 // GET /teams (Lihat daftar tim forming)
 router.get('/teams', auth, async (req, res) => {
   try {
-    const teams = await getTeamList();
+    const needsSkill = req.query.needs_skill || req.query.needsSkill || null;
+    const teams = needsSkill ? await getTeamListBySkill(needsSkill) : await getTeamList();
     res.json({ data: teams });
   } catch (err) { 
     res.status(500).json({ error: 'internal_error' }); 
