@@ -43,11 +43,11 @@ router.post('/pool', auth, async (req, res) => {
 /**
  * GET /pool
  * List pool dengan pagination dan filter
- * Query: period, program_studi, sdg_topic, status, page, limit
+ * Query: period, program_studi, sdg_topic, status, page, limit, skill
  */
 router.get('/pool', auth, async (req, res) => {
   try {
-    const { period = '2024-1', program_studi, sdg_topic, status = 'waiting', page = 1, limit = 10 } = req.query;
+    const { period = '2024-1', program_studi, sdg_topic, status = 'waiting', page = 1, limit = 10, skill = null } = req.query;
 
     const result = await getPoolList({
       period,
@@ -56,6 +56,7 @@ router.get('/pool', auth, async (req, res) => {
       status,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
+      skill: skill || null,
     });
 
     return res.json(result);

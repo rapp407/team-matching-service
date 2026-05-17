@@ -52,7 +52,7 @@ async function joinPool(studentId, studentName, programStudi, data) {
 
 /**
  * Get pool list dengan pagination dan filter
- * @param {object} filters - { period, program_studi, sdg_topic, status, page, limit }
+ * @param {object} filters - { period, program_studi, sdg_topic, status, page, limit, skill }
  * @returns {object} - { data: [], total, page, limit }
  */
 async function getPoolList(filters = {}) {
@@ -63,6 +63,7 @@ async function getPoolList(filters = {}) {
     status = 'waiting',
     page = 1,
     limit = 10,
+    skill = null,
   } = filters;
 
   let whereClause = `WHERE period = $1 AND deleted_at IS NULL`;
@@ -84,6 +85,13 @@ async function getPoolList(filters = {}) {
   if (sdg_topic) {
     whereClause += ` AND $${paramIndex} = ANY(sdg_topics)`;
     params.push(sdg_topic);
+    paramIndex++;
+  }
+
+  if (skill) {
+    // filter pool_entries where skills jsonb array contains the given skill string
+    whereClause += ` AND skills ? $${paramIndex}`;
+    params.push(skill);
     paramIndex++;
   }
 
