@@ -37,6 +37,19 @@ async function getTeamByPoStudentId(poStudentId) {
   return result.rows[0] || null;
 }
 
+async function getActiveTeamByMember(studentId) {
+  const result = await query(
+    `SELECT t.id, t.name, t.status, t.period, t.po_student_id
+     FROM teams t
+     JOIN team_members m ON m.team_id = t.id
+     WHERE m.student_id = $1 AND m.left_at IS NULL AND t.status IN ('forming', 'active')
+     LIMIT 1`,
+    [studentId]
+  );
+
+  return result.rows[0] || null;
+}
+
 async function getTeamMemberByStudentId(teamId, studentId) {
   const result = await query(
     `SELECT id, team_id, student_id, role_in_team
@@ -416,6 +429,7 @@ module.exports = {
   getPoolEntryByStudentAndPeriod,
   getTeamById,
   getTeamByPoStudentId,
+  getActiveTeamByMember,
   getTeamMemberByStudentId,
   getInviteById,
   updateRequiredSkills,

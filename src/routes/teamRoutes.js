@@ -234,4 +234,19 @@ router.delete('/teams/:id/members/me', auth, requireStudentRole, async (req, res
   }
 });
 
+// DELETE /members/me (Member keluar sendiri - global alias)
+router.delete('/members/me', auth, requireStudentRole, async (req, res) => {
+  try {
+    const studentId = req.user.student_id;
+    const team = await getActiveTeamByMember(studentId);
+    if (!team) return res.status(404).json({ error: 'team_not_found' });
+    if (team.po_student_id === studentId) return res.status(400).json({ error: 'po_cannot_leave' });
+
+    await removeMember(team.id, studentId, team.period);
+    return res.json({ message: 'Berhasil keluar dari tim' });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
+  }
+});
+
 module.exports = router;
