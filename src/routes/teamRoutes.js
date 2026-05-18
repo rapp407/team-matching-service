@@ -2,7 +2,7 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const { 
   createTeam, inviteMemberToTeam, respondToInvite, getPoolEntryByStudentAndPeriod,
-  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember
+  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember, getTeamByPoStudentId
 } = require('../services/teamService');
 
 const router = express.Router();
@@ -12,6 +12,24 @@ function requireStudentRole(req, res, next) {
     return res.status(403).json({ error: 'forbidden', detail: 'Only student can perform this action' });
   }
   return next();
+}
+
+async function handleCreateJoinRequest(req, res, teamId) {
+  try {
+    if (!teamId) {
+      return res.status(400).json({ error: 'missing_required_fields', required: ['team_id'] });
+    }
+
+    const result = await createJoinRequest({
+      teamId,
+      studentId: req.user.student_id,
+      message: req.body.message || null,
+    });
+
+    return res.status(201).json({ data: result });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
+  }
 }
 
 /** ==========================================
@@ -63,7 +81,8 @@ router.put('/teams/:id/required-skills', auth, requireStudentRole, async (req, r
 // GET /teams (Lihat daftar tim forming)
 router.get('/teams', auth, async (req, res) => {
   try {
-    const teams = await getTeamList();
+    const needsSkill = req.query.needs_skill || req.query.needsSkill || null;
+    const teams = needsSkill ? await getTeamListBySkill(needsSkill) : await getTeamList();
     res.json({ data: teams });
   } catch (err) { 
     res.status(500).json({ error: 'internal_error' }); 
@@ -128,16 +147,33 @@ router.put('/invites/:id/respond', auth, requireStudentRole, async (req, res) =>
  * 3. JOIN REQUESTS (Talent memohon gabung)
  * ========================================== */
 
+// POST /join-requests (Talent apply ke tim via payload team_id)
+router.post('/join-requests', auth, requireStudentRole, async (req, res) => {
+  return handleCreateJoinRequest(req, res, req.body.team_id || req.body.teamId);
+});
+
+// PUT /join-requests/:req/respond (PO acc/reject permohonan) - global alias
+router.put('/join-requests/:req/respond', auth, requireStudentRole, async (req, res) => {
+  try {
+    const { req: reqId } = req.params;
+    const { action } = req.body;
+    if (!action) return res.status(400).json({ error: 'missing_required_fields', required: ['action'] });
+
+    const normalizedAction = String(action).toLowerCase();
+    if (!['accepted', 'rejected'].includes(normalizedAction)) {
+      return res.status(400).json({ error: 'invalid_action', detail: "action harus accepted atau rejected" });
+    }
+
+    const result = await respondJoinRequest({ requestId: reqId, poStudentId: req.user.student_id, response: normalizedAction });
+    return res.json({ data: result });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
+  }
+});
+
 // POST /teams/:id/join-requests (Talent apply ke tim)
 router.post('/teams/:id/join-requests', auth, requireStudentRole, async (req, res) => {
-  try {
-    const result = await createJoinRequest({
-      teamId: req.params.id, studentId: req.user.student_id, message: req.body.message
-    });
-    res.status(201).json({ data: result });
-  } catch (err) { 
-    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
-  }
+  return handleCreateJoinRequest(req, res, req.params.id);
 });
 
 // PUT /teams/:id/join-requests/:req_id (PO acc/reject permohonan)
@@ -149,6 +185,21 @@ router.put('/teams/:id/join-requests/:req_id', auth, requireStudentRole, async (
     res.json({ data: result });
   } catch (err) { 
     res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
+  }
+});
+
+// DELETE /members/:sid (PO kick member dari tim mereka) - global alias
+router.delete('/members/:sid', auth, requireStudentRole, async (req, res) => {
+  try {
+    const targetSid = req.params.sid;
+
+    const team = await getTeamByPoStudentId(req.user.student_id);
+    if (!team || team.po_student_id !== req.user.student_id) return res.status(403).json({ error: 'forbidden' });
+
+    await removeMember(team.id, targetSid, team.period);
+    return res.json({ message: 'Member berhasil dikeluarkan' });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
   }
 });
 
@@ -181,6 +232,21 @@ router.delete('/teams/:id/members/me', auth, requireStudentRole, async (req, res
     res.json({ message: 'Berhasil keluar dari tim' });
   } catch (err) { 
     res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
+  }
+});
+
+// DELETE /members/me (Member keluar sendiri - global alias)
+router.delete('/members/me', auth, requireStudentRole, async (req, res) => {
+  try {
+    const studentId = req.user.student_id;
+    const team = await getActiveTeamByMember(studentId);
+    if (!team) return res.status(404).json({ error: 'team_not_found' });
+    if (team.po_student_id === studentId) return res.status(400).json({ error: 'po_cannot_leave' });
+
+    await removeMember(team.id, studentId, team.period);
+    return res.json({ message: 'Berhasil keluar dari tim' });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
   }
 });
 

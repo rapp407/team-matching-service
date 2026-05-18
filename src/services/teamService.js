@@ -25,6 +25,31 @@ async function getTeamById(teamId) {
   return result.rows[0] || null;
 }
 
+async function getTeamByPoStudentId(poStudentId) {
+  const result = await query(
+    `SELECT id, name, status, generation_method, period, created_by, po_student_id, created_at
+     FROM teams
+     WHERE po_student_id = $1 AND status IN ('forming', 'active')
+     LIMIT 1`,
+    [poStudentId]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function getActiveTeamByMember(studentId) {
+  const result = await query(
+    `SELECT t.id, t.name, t.status, t.period, t.po_student_id
+     FROM teams t
+     JOIN team_members m ON m.team_id = t.id
+     WHERE m.student_id = $1 AND m.left_at IS NULL AND t.status IN ('forming', 'active')
+     LIMIT 1`,
+    [studentId]
+  );
+
+  return result.rows[0] || null;
+}
+
 async function getTeamMemberByStudentId(teamId, studentId) {
   const result = await query(
     `SELECT id, team_id, student_id, role_in_team
@@ -310,7 +335,20 @@ async function updateRequiredSkills(teamId, poStudentId, requiredSkills) {
 }
 
 async function getTeamList() {
+  // legacy: no filter
   const result = await query(`SELECT id, name, status, required_skills, po_student_id FROM teams WHERE status = 'forming'`);
+  return result.rows;
+}
+
+// New: filtered list by skill when provided (skill should be a string)
+async function getTeamListBySkill(needsSkill) {
+  if (!needsSkill) return getTeamList();
+
+  // Use jsonb ? operator which returns true if the string exists in top-level JSON array
+  const result = await query(
+    `SELECT id, name, status, required_skills, po_student_id FROM teams WHERE status = 'forming' AND required_skills ? $1`,
+    [needsSkill]
+  );
   return result.rows;
 }
 
@@ -403,10 +441,13 @@ module.exports = {
   respondToInvite,
   getPoolEntryByStudentAndPeriod,
   getTeamById,
+  getTeamByPoStudentId,
+  getActiveTeamByMember,
   getTeamMemberByStudentId,
   getInviteById,
   updateRequiredSkills,
   getTeamList,
+  getTeamListBySkill,
   getTeamDetail,
   createJoinRequest,
   respondJoinRequest,
