@@ -397,6 +397,18 @@ async function removeMember(teamId, targetStudentId, period) {
   }
 }
 
+async function getActiveTeamForMember(studentId) {
+  const result = await query(
+    `SELECT t.id as team_id, t.period, t.po_student_id 
+     FROM team_members tm
+     JOIN teams t ON tm.team_id = t.id
+     WHERE tm.student_id = $1 AND tm.left_at IS NULL AND t.status IN ('forming', 'active')
+     LIMIT 1`,
+    [studentId]
+  );
+  return result.rows[0] || null;
+}
+
 module.exports = {
   createTeam,
   inviteMemberToTeam,
@@ -411,4 +423,5 @@ module.exports = {
   createJoinRequest,
   respondJoinRequest,
   removeMember,
+  getActiveTeamForMember,
 };

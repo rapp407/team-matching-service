@@ -2,7 +2,7 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const { 
   createTeam, inviteMemberToTeam, respondToInvite, getPoolEntryByStudentAndPeriod,
-  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember
+  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember, getActiveTeamForMember
 } = require('../services/teamService');
 
 const router = express.Router();
@@ -179,6 +179,50 @@ router.delete('/teams/:id/members/me', auth, requireStudentRole, async (req, res
 
     await removeMember(req.params.id, req.user.student_id, team.period);
     res.json({ message: 'Berhasil keluar dari tim' });
+  } catch (err) { 
+    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
+  }
+});
+
+/** ==========================================
+ * 5. GLOBAL ALIAS (MEMBER MANAGEMENT)
+ * ========================================== */
+
+router.delete('/members/me', auth, requireStudentRole, async (req, res) => {
+  try {
+    const activeTeam = await getActiveTeamForMember(req.user.student_id);
+    if (!activeTeam) {
+      return res.status(404).json({ error: 'not_in_team', detail: 'Kamu tidak sedang berada di tim manapun' });
+    }
+
+    if (activeTeam.po_student_id === req.user.student_id) {
+      return res.status(400).json({ error: 'po_cannot_leave', detail: 'PO tidak bisa leave, harus disband (bubarkan) tim' }); 
+    }
+
+    await removeMember(activeTeam.team_id, req.user.student_id, activeTeam.period);
+    res.json({ message: 'Berhasil keluar dari tim' });
+  } catch (err) { 
+    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
+  }
+});
+
+router.delete('/members/:sid', auth, requireStudentRole, async (req, res) => {
+  try {
+    const activeTeam = await getActiveTeamForMember(req.user.student_id);
+    if (!activeTeam) {
+      return res.status(404).json({ error: 'not_in_team', detail: 'Kamu tidak memiliki tim aktif' });
+    }
+
+    if (activeTeam.po_student_id !== req.user.student_id) {
+      return res.status(403).json({ error: 'forbidden', detail: 'Hanya PO yang bisa melakukan kick member' });
+    }
+
+    if (req.params.sid === req.user.student_id) {
+      return res.status(400).json({ error: 'invalid_action', detail: 'PO tidak bisa di-kick' });
+    }
+
+    await removeMember(activeTeam.team_id, req.params.sid, activeTeam.period);
+    res.json({ message: `Member dengan ID ${req.params.sid} berhasil dikeluarkan` });
   } catch (err) { 
     res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
   }
