@@ -1,63 +1,62 @@
 services:
-
-  postgres:
-    image: postgres:16
-    container_name: postgres-container
-
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secret123
-      POSTGRES_DB: mydb
-
+  app:
+    build: .
     ports:
-      - "5432:5432"
+      # 8083 = port host kelompok; 8080 = port container (disepakati semua tim)
+      - "8083:8080"
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=team_matching
+      - DATABASE_PASSWORD=team_matching_pass
+      - DATABASE_NAME=team_matching_db
+      - DATABASE_URL=postgresql://team_matching:team_matching_pass@db:5432/team_matching_db
+      - MOCK_SSO_URL=http://mock-sso:3001/auth
+      - MOCK_SSO_SECRET=your-secret-key-here
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-sso:
+        condition: service_started
 
+  mock-sso:
+    build: .
+    command: node src/mock-sso/index.js
+    restart: unless-stopped
+    environment:
+      - MOCK_SSO_PORT=3001
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: team_matching
+      POSTGRES_PASSWORD: team_matching_pass
+      POSTGRES_DB: team_matching_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  mongodb:
-    image: mongo:7
-    container_name: mongodb-container
-
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: secret123
-
-    ports:
-      - "27017:27017"
-
-    volumes:
-      - mongodb_data:/data/db
-
-  redis:
-    image: redis:7
-    container_name: redis-container
-
-    ports:
-      - "6379:6379"
-
-    volumes:
-      - redis_data:/data
+      - ./migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U team_matching -d team_matching_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: pgadmin-container
-
+    image: dpage/pgadmin4
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@local.dev
-      PGADMIN_DEFAULT_PASSWORD: admin123
-
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
     ports:
-      - "8080:80"
-    
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-
+      # Port untuk akses pgAdmin dari browser (ganti jika konflik)
+      - "5050:80"
     depends_on:
-      - postgres
+      - db
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-  mongodb_data:
-  redis_data:
-  pgadmin_data:
