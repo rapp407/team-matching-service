@@ -2,7 +2,7 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const { 
   createTeam, inviteMemberToTeam, respondToInvite, getPoolEntryByStudentAndPeriod,
-  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember, getActiveTeamForMember
+  updateRequiredSkills, getTeamList, getTeamDetail, createJoinRequest, respondJoinRequest, removeMember
 } = require('../services/teamService');
 
 const router = express.Router();
@@ -21,7 +21,8 @@ function requireStudentRole(req, res, next) {
 // POST /teams (Buat tim baru)
 router.post('/teams', auth, requireStudentRole, async (req, res) => {
   try {
-    const { name, period, generation_method = 'manual' } = req.body;
+    // generation_method dihapus sesuai arsitektur V3
+    const { name, period } = req.body;
     const { student_id, student_name } = req.user;
 
     if (!name || !period) {
@@ -38,7 +39,7 @@ router.post('/teams', auth, requireStudentRole, async (req, res) => {
     }
 
     const team = await createTeam({
-      name, generation_method, period, createdBy: student_id, 
+      name, period, createdBy: student_id, 
       poStudentId: student_id, poStudentName: student_name, poProgramStudi: poolEntry.program_studi,
     });
 
@@ -158,19 +159,6 @@ router.put('/teams/:id/join-requests/:req_id', auth, requireStudentRole, async (
  * ========================================== */
 
 // DELETE /teams/:id/members/:sid (PO kick member)
-router.delete('/teams/:id/members/:sid', auth, requireStudentRole, async (req, res) => {
-  try {
-    const team = await getTeamDetail(req.params.id);
-    if (!team || team.po_student_id !== req.user.student_id) return res.status(403).json({ error: 'forbidden' });
-    
-    await removeMember(req.params.id, req.params.sid, team.period);
-    res.json({ message: 'Member berhasil dikeluarkan' });
-  } catch (err) { 
-    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
-  }
-});
-
-// DELETE /teams/:id/members/me (Member keluar sendiri)
 router.delete('/teams/:id/members/me', auth, requireStudentRole, async (req, res) => {
   try {
     const team = await getTeamDetail(req.params.id);
@@ -184,48 +172,19 @@ router.delete('/teams/:id/members/me', auth, requireStudentRole, async (req, res
   }
 });
 
-/** ==========================================
- * 5. GLOBAL ALIAS (MEMBER MANAGEMENT)
- * ========================================== */
 
-router.delete('/members/me', auth, requireStudentRole, async (req, res) => {
+router.delete('/teams/:id/members/:sid', auth, requireStudentRole, async (req, res) => {
   try {
-    const activeTeam = await getActiveTeamForMember(req.user.student_id);
-    if (!activeTeam) {
-      return res.status(404).json({ error: 'not_in_team', detail: 'Kamu tidak sedang berada di tim manapun' });
-    }
-
-    if (activeTeam.po_student_id === req.user.student_id) {
-      return res.status(400).json({ error: 'po_cannot_leave', detail: 'PO tidak bisa leave, harus disband (bubarkan) tim' }); 
-    }
-
-    await removeMember(activeTeam.team_id, req.user.student_id, activeTeam.period);
-    res.json({ message: 'Berhasil keluar dari tim' });
+    const team = await getTeamDetail(req.params.id);
+    if (!team || team.po_student_id !== req.user.student_id) return res.status(403).json({ error: 'forbidden' });
+    
+    await removeMember(req.params.id, req.params.sid, team.period);
+    res.json({ message: 'Member berhasil dikeluarkan' });
   } catch (err) { 
     res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
   }
 });
 
-router.delete('/members/:sid', auth, requireStudentRole, async (req, res) => {
-  try {
-    const activeTeam = await getActiveTeamForMember(req.user.student_id);
-    if (!activeTeam) {
-      return res.status(404).json({ error: 'not_in_team', detail: 'Kamu tidak memiliki tim aktif' });
-    }
 
-    if (activeTeam.po_student_id !== req.user.student_id) {
-      return res.status(403).json({ error: 'forbidden', detail: 'Hanya PO yang bisa melakukan kick member' });
-    }
-
-    if (req.params.sid === req.user.student_id) {
-      return res.status(400).json({ error: 'invalid_action', detail: 'PO tidak bisa di-kick' });
-    }
-
-    await removeMember(activeTeam.team_id, req.params.sid, activeTeam.period);
-    res.json({ message: `Member dengan ID ${req.params.sid} berhasil dikeluarkan` });
-  } catch (err) { 
-    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
-  }
-});
 
 module.exports = router;

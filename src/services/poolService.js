@@ -1,4 +1,11 @@
-const { query } = require('../db');
+const { query, getClient } = require('../db');
+
+// Helper untuk membaca format skills (mendukung format Array Object)
+function formatSkills(skillsData) {
+  if (!skillsData) return [];
+  if (Array.isArray(skillsData)) return skillsData;
+  return Object.entries(skillsData).map(([name, level]) => ({ name, level }));
+}
 
 /**
  * Join pool - create pool entry untuk mahasiswa
@@ -9,36 +16,74 @@ const { query } = require('../db');
  * @returns {object} - pool entry yang baru dibuat
  */
 async function joinPool(studentId, studentName, programStudi, data) {
-  // PASTIKAN 'skills' ADA DI BARIS DESTRUCTURING INI
   const { sdg_topics = [], availability = 'full-time', notes = null, period, skills } = data;
+  const formattedSkills = formatSkills(skills);
 
-  // Validasi duplikasi: student_id + period harus unik dan tidak boleh withdrawn/deleted
-  const existingResult = await query(
-    `SELECT id, status FROM pool_entries 
-     WHERE student_id = $1 AND period = $2 AND deleted_at IS NULL
-     LIMIT 1`,
-    [studentId, period]
-  );
-
-  if (existingResult.rows.length > 0) {
-    const existing = existingResult.rows[0];
-    const err = new Error('duplicate_entry');
-    err.detail = `Student sudah ada di pool untuk period ${period} (status: ${existing.status})`;
-    err.status = 409; // Conflict
-    throw err;
-  }
-
-  // Insert ke pool_entries
+  const client = await getClient();
   try {
-    const insertResult = await query(
-      `INSERT INTO pool_entries 
-       (student_id, student_name, program_studi, sdg_topics, availability, notes, status, period, skills)
-       VALUES ($1, $2, $3, $4, $5, $6, 'waiting', $7, $8)
-       RETURNING id, student_id, student_name, program_studi, sdg_topics, skills, availability, notes, status, period, created_at, updated_at`,
-      [studentId, studentName, programStudi, sdg_topics, availability, notes, period, JSON.stringify(skills)]
+    await client.query('BEGIN');
+
+    // 1. Cek keberadaan data (Validasi duplikasi / Rejoin)
+    const existingResult = await client.query(
+      `SELECT id, status, deleted_at FROM pool_entries WHERE student_id = $1 AND period = $2 LIMIT 1`,
+      [studentId, period]
     );
-    return insertResult.rows[0];
+
+    let poolEntry;
+
+    if (existingResult.rows.length > 0) {
+      const existing = existingResult.rows[0];
+      
+      // Jika user sudah ada tapi withdrawn / deleted, lakukan REJOIN
+      if (existing.status === 'withdrawn' || existing.deleted_at !== null) {
+        // PERHATIAN: Tidak ada lagi UPDATE kolom 'skills' di sini
+        const updateResult = await client.query(
+          `UPDATE pool_entries 
+           SET status = 'waiting', deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1
+           RETURNING id, student_id, student_name, program_studi, sdg_topics, availability, notes, status, period, created_at, updated_at`,
+          [existing.id]
+        );
+        poolEntry = updateResult.rows[0];
+      } else {
+        throw { 
+          status: 409, 
+          message: 'duplicate_entry', 
+          detail: `Student sudah aktif di pool dengan status: ${existing.status}` 
+        };
+      }
+    } else {
+      // Insert baru ke pool_entries (TANPA kolom skills)
+      const insertResult = await client.query(
+        `INSERT INTO pool_entries (student_id, student_name, program_studi, sdg_topics, availability, notes, status, period)
+         VALUES ($1, $2, $3, $4, $5, $6, 'waiting', $7)
+         RETURNING *`,
+        [studentId, studentName, programStudi, sdg_topics, availability, notes, period]
+      );
+      poolEntry = insertResult.rows[0];
+    }
+
+    // 2. Simpan skill ke tabel relasional talent_skills (Migrasi V3)
+    // Hapus data skill lama jika ini adalah proses Rejoin agar tidak duplicate
+    await client.query(`DELETE FROM talent_skills WHERE student_id = $1 AND period = $2`, [studentId, period]);
+    
+    if (formattedSkills.length > 0) {
+      for (const skill of formattedSkills) {
+        await client.query(
+          `INSERT INTO talent_skills (student_id, skill_name, skill_level, period) VALUES ($1, $2, $3, $4)`,
+          [studentId, String(skill.name).toLowerCase(), skill.level || 1, period]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    
+    // Tempelkan skills ke response agar frontend tetap mendapatkan datanya
+    poolEntry.skills = formattedSkills;
+    return poolEntry;
+
   } catch (err) {
+    await client.query('ROLLBACK');
     // Unique constraint on (student_id, period) may still occur under concurrency
     if (err && err.code === '23505') {
       const e = new Error('duplicate_entry');
@@ -47,6 +92,8 @@ async function joinPool(studentId, studentName, programStudi, data) {
       throw e;
     }
     throw err;
+  } finally {
+    client.release();
   }
 }
 

@@ -8,16 +8,25 @@ const router = express.Router();
 // FR-014: PO minta rekomendasi anggota
 router.get('/recommendations/members', auth, async (req, res) => {
   try {
-    const { team_id, limit = 10 } = req.query;
+    const { team_id } = req.query; 
     if (!team_id) return res.status(400).json({ error: 'team_id required' });
 
-    // Cek apakah user ini benar-benar PO dari tim tersebut
+    // 1. Cek apakah tim ada (Jika tidak ada, kembalikan 404, bukan 403)
     const team = await getTeamById(team_id);
-    if (!team || team.po_student_id !== req.user.student_id) {
-      return res.status(403).json({ error: 'forbidden' });
+    if (!team) {
+      return res.status(404).json({ error: 'team_not_found', detail: `Tim dengan ID ${team_id} tidak ditemukan` });
     }
 
-    const recommendations = await getMemberRecommendations(team_id, team.period, parseInt(limit));
+    // 2. Cek otoritas dengan menyamakan tipe datanya menjadi String
+    if (String(team.po_student_id) !== String(req.user.student_id)) {
+      return res.status(403).json({ 
+        error: 'forbidden', 
+        detail: `Hanya PO tim yang berhak melihat rekomendasi (PO: ${team.po_student_id}, Kamu: ${req.user.student_id})` 
+      });
+    }
+
+    // 3. Panggil service V3
+    const recommendations = await getMemberRecommendations(team_id);
     res.json({ success: true, data: { team_id, recommendations } });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'internal_error' });
@@ -27,8 +36,10 @@ router.get('/recommendations/members', auth, async (req, res) => {
 // FR-015: Talent minta rekomendasi tim
 router.get('/recommendations/teams', auth, async (req, res) => {
   try {
-    const { period = '2024-1', limit = 10 } = req.query;
-    const recommendations = await getTeamRecommendations(req.user.student_id, period, parseInt(limit));
+    const { period = '2024-1' } = req.query;
+    
+    // Panggil service V3
+    const recommendations = await getTeamRecommendations(req.user.student_id, period);
     res.json({ success: true, data: { recommendations } });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'internal_error' });
