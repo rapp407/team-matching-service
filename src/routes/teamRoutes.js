@@ -39,7 +39,8 @@ async function handleCreateJoinRequest(req, res, teamId) {
 // POST /teams (Buat tim baru)
 router.post('/teams', auth, requireStudentRole, async (req, res) => {
   try {
-    const { name, period, generation_method = 'manual' } = req.body;
+    // generation_method dihapus sesuai arsitektur V3
+    const { name, period } = req.body;
     const { student_id, student_name } = req.user;
 
     if (!name || !period) {
@@ -56,7 +57,7 @@ router.post('/teams', auth, requireStudentRole, async (req, res) => {
     }
 
     const team = await createTeam({
-      name, generation_method, period, createdBy: student_id, 
+      name, period, createdBy: student_id, 
       poStudentId: student_id, poStudentName: student_name, poProgramStudi: poolEntry.program_studi,
     });
 
@@ -209,19 +210,6 @@ router.delete('/members/:sid', auth, requireStudentRole, async (req, res) => {
  * ========================================== */
 
 // DELETE /teams/:id/members/:sid (PO kick member)
-router.delete('/teams/:id/members/:sid', auth, requireStudentRole, async (req, res) => {
-  try {
-    const team = await getTeamDetail(req.params.id);
-    if (!team || team.po_student_id !== req.user.student_id) return res.status(403).json({ error: 'forbidden' });
-    
-    await removeMember(req.params.id, req.params.sid, team.period);
-    res.json({ message: 'Member berhasil dikeluarkan' });
-  } catch (err) { 
-    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
-  }
-});
-
-// DELETE /teams/:id/members/me (Member keluar sendiri)
 router.delete('/teams/:id/members/me', auth, requireStudentRole, async (req, res) => {
   try {
     const team = await getTeamDetail(req.params.id);
@@ -235,19 +223,19 @@ router.delete('/teams/:id/members/me', auth, requireStudentRole, async (req, res
   }
 });
 
-// DELETE /members/me (Member keluar sendiri - global alias)
-router.delete('/members/me', auth, requireStudentRole, async (req, res) => {
-  try {
-    const studentId = req.user.student_id;
-    const team = await getActiveTeamByMember(studentId);
-    if (!team) return res.status(404).json({ error: 'team_not_found' });
-    if (team.po_student_id === studentId) return res.status(400).json({ error: 'po_cannot_leave' });
 
-    await removeMember(team.id, studentId, team.period);
-    return res.json({ message: 'Berhasil keluar dari tim' });
-  } catch (err) {
-    return res.status(err.status || 500).json({ error: err.message || 'internal_error' });
+router.delete('/teams/:id/members/:sid', auth, requireStudentRole, async (req, res) => {
+  try {
+    const team = await getTeamDetail(req.params.id);
+    if (!team || team.po_student_id !== req.user.student_id) return res.status(403).json({ error: 'forbidden' });
+    
+    await removeMember(req.params.id, req.params.sid, team.period);
+    res.json({ message: 'Member berhasil dikeluarkan' });
+  } catch (err) { 
+    res.status(err.status || 500).json({ error: err.message || 'internal_error' }); 
   }
 });
+
+
 
 module.exports = router;

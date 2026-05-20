@@ -1,8 +1,8 @@
 const { query } = require('../db');
 
-// Fungsi pembantu untuk mengecek kecocokan skill (Mendukung Array Level 1 & Object Level 3)
+// Fungsi pembantu untuk mengecek kecocokan skill
 function calculateSkillMatch(reqSkills, talentSkills) {
-  if (!reqSkills || !Array.isArray(reqSkills) || reqSkills.length === 0) return 1; // Jika tim tidak mensyaratkan apa-apa, otomatis 100% cocok
+  if (!reqSkills || !Array.isArray(reqSkills) || reqSkills.length === 0) return 1; // 100% cocok jika tidak ada syarat
 
   let matchCount = 0;
   
@@ -11,16 +11,20 @@ function calculateSkillMatch(reqSkills, talentSkills) {
     let hasSkill = false;
 
     if (Array.isArray(talentSkills)) {
-      // Logika Level 1: Cek apakah nama skill ada di dalam array
+      // Cek persis nama skill
       hasSkill = !!talentSkills.find(s => s.name && s.name.toLowerCase() === reqName);
+      
+      // Penerjemah cerdas (Mendukung mapping jika nama skill sedikit berbeda)
+      if (!hasSkill) {
+        if ((reqName.includes('ui') || reqName.includes('ux')) && talentSkills.find(s => s.name && s.name.toLowerCase() === 'design')) hasSkill = true;
+        if ((reqName.includes('back') || reqName.includes('front') || reqName.includes('web')) && talentSkills.find(s => s.name && s.name.toLowerCase() === 'programming')) hasSkill = true;
+      }
     } else if (talentSkills && typeof talentSkills === 'object') {
-      // Logika Level 3: Cek atribut object
+      // Fallback untuk logika object lama (jika masih tersisa)
       if (talentSkills[reqName] && talentSkills[reqName] > 0) {
         hasSkill = true;
       } else {
-        // Penerjemah cerdas: jika tim butuh "ui/ux", cek apakah talent punya skill "design"
         if ((reqName.includes('ui') || reqName.includes('ux')) && talentSkills['design'] > 0) hasSkill = true;
-        // Jika butuh "backend"/"frontend", cek apakah punya skill "programming"
         if ((reqName.includes('back') || reqName.includes('front') || reqName.includes('web')) && talentSkills['programming'] > 0) hasSkill = true;
       }
     }
@@ -33,17 +37,30 @@ function calculateSkillMatch(reqSkills, talentSkills) {
 
 // Rekomendasi Mahasiswa untuk PO (TC-07)
 async function recommendMembersForTeam(teamId) {
-  const teamResult = await query(`SELECT id, required_skills, period FROM teams WHERE id = $1`, [teamId]);
+  // Ambil data tim beserta required skills hasil JOIN dan agregasi JSON
+  const teamResult = await query(
+    `SELECT t.id, t.period, 
+       COALESCE(json_agg(json_build_object('name', trs.skill_name, 'count', trs.required_count)) FILTER (WHERE trs.skill_name IS NOT NULL), '[]') as required_skills
+     FROM teams t
+     LEFT JOIN team_required_skills trs ON t.id = trs.team_id
+     WHERE t.id = $1
+     GROUP BY t.id, t.period`, 
+    [teamId]
+  );
+  
   if (teamResult.rows.length === 0) throw { status: 404, message: 'team_not_found' };
   
   const team = teamResult.rows[0];
   const reqSkills = team.required_skills || [];
 
-  // Ambil mahasiswa yang masih waiting di period yang sama
+  // Ambil kandidat beserta skills mereka hasil JOIN dan agregasi JSON
   const poolResult = await query(
-    `SELECT student_id, student_name, program_studi, skills, sdg_topics 
-     FROM pool_entries 
-     WHERE status = 'waiting' AND period = $1 AND deleted_at IS NULL`,
+    `SELECT p.id, p.student_id, p.student_name, p.program_studi, p.sdg_topics,
+       COALESCE(json_agg(json_build_object('name', ts.skill_name, 'level', ts.skill_level)) FILTER (WHERE ts.skill_name IS NOT NULL), '[]') as skills
+     FROM pool_entries p
+     LEFT JOIN talent_skills ts ON p.student_id = ts.student_id AND p.period = ts.period
+     WHERE p.status = 'waiting' AND p.period = $1 AND p.deleted_at IS NULL
+     GROUP BY p.id`, 
     [team.period]
   );
 
@@ -58,17 +75,29 @@ async function recommendMembersForTeam(teamId) {
 
 // Rekomendasi Tim untuk Mahasiswa (TC-08)
 async function recommendTeamsForMember(studentId, period) {
+  // Ambil data talent beserta skills hasil JOIN dan agregasi JSON
   const poolResult = await query(
-    `SELECT student_id, skills, sdg_topics FROM pool_entries WHERE student_id = $1 AND period = $2 AND deleted_at IS NULL`,
+    `SELECT p.id, p.student_id, p.sdg_topics,
+       COALESCE(json_agg(json_build_object('name', ts.skill_name, 'level', ts.skill_level)) FILTER (WHERE ts.skill_name IS NOT NULL), '[]') as skills
+     FROM pool_entries p
+     LEFT JOIN talent_skills ts ON p.student_id = ts.student_id AND p.period = ts.period
+     WHERE p.student_id = $1 AND p.period = $2 AND p.deleted_at IS NULL
+     GROUP BY p.id`, 
     [studentId, period]
   );
+  
   if (poolResult.rows.length === 0) throw { status: 404, message: 'pool_entry_not_found' };
   
   const talent = poolResult.rows[0];
 
-  // Ambil tim yang masih forming di period yang sama
+  // Ambil semua tim forming beserta required skills mereka hasil JOIN dan agregasi JSON
   const teamsResult = await query(
-    `SELECT id, name, required_skills, po_student_id FROM teams WHERE status = 'forming' AND period = $1`,
+    `SELECT t.id, t.name, t.po_student_id,
+       COALESCE(json_agg(json_build_object('name', trs.skill_name, 'count', trs.required_count)) FILTER (WHERE trs.skill_name IS NOT NULL), '[]') as required_skills
+     FROM teams t
+     LEFT JOIN team_required_skills trs ON t.id = trs.team_id
+     WHERE t.status = 'forming' AND t.period = $1
+     GROUP BY t.id`, 
     [period]
   );
 
