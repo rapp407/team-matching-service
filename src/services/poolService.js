@@ -5,11 +5,12 @@ const { query } = require('../db');
  * @param {string} studentId - student_id dari auth
  * @param {string} studentName - nama student dari auth atau request body
  * @param {string} programStudi - program studi mahasiswa
- * @param {object} data - { sdg_topics: [], availability, notes, period }
+ * @param {object} data - { sdg_topics: [], availability, notes, period, skills }
  * @returns {object} - pool entry yang baru dibuat
  */
 async function joinPool(studentId, studentName, programStudi, data) {
-  const { sdg_topics = [], availability = 'full-time', notes = null, period } = data;
+  // PASTIKAN 'skills' ADA DI BARIS DESTRUCTURING INI
+  const { sdg_topics = [], availability = 'full-time', notes = null, period, skills } = data;
 
   // Validasi duplikasi: student_id + period harus unik dan tidak boleh withdrawn/deleted
   const existingResult = await query(
@@ -27,14 +28,14 @@ async function joinPool(studentId, studentName, programStudi, data) {
     throw err;
   }
 
-  // Insert ke pool_entries (tangani kemungkinan race condition unique constraint)
+  // Insert ke pool_entries
   try {
     const insertResult = await query(
       `INSERT INTO pool_entries 
-       (student_id, student_name, program_studi, sdg_topics, availability, notes, status, period)
-       VALUES ($1, $2, $3, $4, $5, $6, 'waiting', $7)
-       RETURNING id, student_id, student_name, program_studi, sdg_topics, availability, notes, status, period, created_at, updated_at`,
-      [studentId, studentName, programStudi, sdg_topics, availability, notes, period]
+       (student_id, student_name, program_studi, sdg_topics, availability, notes, status, period, skills)
+       VALUES ($1, $2, $3, $4, $5, $6, 'waiting', $7, $8)
+       RETURNING id, student_id, student_name, program_studi, sdg_topics, skills, availability, notes, status, period, created_at, updated_at`,
+      [studentId, studentName, programStudi, sdg_topics, availability, notes, period, JSON.stringify(skills)]
     );
     return insertResult.rows[0];
   } catch (err) {
@@ -51,7 +52,7 @@ async function joinPool(studentId, studentName, programStudi, data) {
 
 /**
  * Get pool list dengan pagination dan filter
- * @param {object} filters - { period, program_studi, sdg_topic, status, page, limit }
+ * @param {object} filters - { period, program_studi, sdg_topic, status, page, limit, skill }
  * @returns {object} - { data: [], total, page, limit }
  */
 async function getPoolList(filters = {}) {
@@ -62,6 +63,7 @@ async function getPoolList(filters = {}) {
     status = 'waiting',
     page = 1,
     limit = 10,
+    skill = null,
   } = filters;
 
   let whereClause = `WHERE period = $1 AND deleted_at IS NULL`;
@@ -83,6 +85,13 @@ async function getPoolList(filters = {}) {
   if (sdg_topic) {
     whereClause += ` AND $${paramIndex} = ANY(sdg_topics)`;
     params.push(sdg_topic);
+    paramIndex++;
+  }
+
+  if (skill) {
+    // filter pool_entries where skills jsonb array contains the given skill string
+    whereClause += ` AND skills ? $${paramIndex}`;
+    params.push(skill);
     paramIndex++;
   }
 

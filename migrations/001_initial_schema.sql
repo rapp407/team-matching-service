@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS pool_entries (
   student_name VARCHAR(255) NOT NULL,
   program_studi VARCHAR(100) NOT NULL,
   sdg_topics INTEGER[] DEFAULT '{}',
+  skills JSONB DEFAULT '[]'::jsonb,
   availability VARCHAR(50) DEFAULT 'full-time',
   notes TEXT,
   status VARCHAR(20) DEFAULT 'waiting' CHECK(status IN ('waiting', 'in_team', 'withdrawn')),
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS teams (
   period VARCHAR(50) NOT NULL,
   created_by VARCHAR(50) NOT NULL,
   po_student_id VARCHAR(50) NOT NULL,
+  required_skills JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   disbanded_at TIMESTAMP,
   diversity_score DECIMAL(4,3),
@@ -77,7 +79,9 @@ CREATE TABLE IF NOT EXISTS team_join_requests (
 );
 
 
--- INDEXES untuk performa query
+-- ==========================================
+-- INDEXES STANDAR (Performa Relasi & Filter)
+-- ==========================================
 
 -- Pool entries indexes
 CREATE INDEX IF NOT EXISTS idx_pool_entries_student_id ON pool_entries(student_id);
@@ -105,3 +109,11 @@ CREATE INDEX IF NOT EXISTS idx_team_join_requests_team_id ON team_join_requests(
 CREATE INDEX IF NOT EXISTS idx_team_join_requests_requester_student_id ON team_join_requests(requester_student_id);
 CREATE INDEX IF NOT EXISTS idx_team_join_requests_status ON team_join_requests(status);
 
+
+-- ==========================================
+-- GIN INDEXES (Super Cepat untuk JSONB & Array)
+-- Mendukung Sistem Matching & Rekomendasi Level 2
+-- ==========================================
+CREATE INDEX IF NOT EXISTS idx_pool_entries_skills ON pool_entries USING GIN (skills);
+CREATE INDEX IF NOT EXISTS idx_teams_required_skills ON teams USING GIN (required_skills);
+CREATE INDEX IF NOT EXISTS idx_pool_entries_sdg_topics ON pool_entries USING GIN (sdg_topics);
